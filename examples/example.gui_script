@@ -1,0 +1,80 @@
+
+function send_message(self, data)
+	websocket.send(self.connection, json.encode({ data = data }), { type = websocket.DATA_TYPE_TEXT })
+end
+
+
+local function on_signaling_data(self, dump)
+	send_message(self, dump)
+end
+
+
+local function on_channel_open(self, event, id, label)
+	if event == "opened" then
+		print(string.format("Data channel \'%s\' with %d opened!", label, id))
+	elseif event == "closed" then
+		print(string.format("Data channel \'%s\' with %d closed!", label, id))
+	end
+end
+
+
+local function got_message(self, id, label, msg)
+	print(string.format("[%s](\'%s\'): %s", id, label, msg))
+end
+
+
+function handle_message(self, message)
+	message = json.decode(message)
+	local type = message.type
+
+	if type == "id" then
+		self.local_id = message.data
+		print("Got ID from server!")
+		gui.set_text(gui.get_node("desc"), string.format("Type the other peer id to connect. Your ID: %d", message.data))
+		webrtc.set_configuration("", on_signaling_data, on_channel_open, got_message)
+	elseif type == "connection" then
+		webrtc.process_data(message.data)
+	end
+end
+
+
+local function websocket_callback(self, conn, data)
+	if data.event == websocket.EVENT_DISCONNECTED then
+		print("Disconnected: " .. tostring(conn))
+		self.connection = nil
+
+	elseif data.event == websocket.EVENT_CONNECTED then
+		print("Connected: " .. tostring(conn))
+		self.connection = conn
+
+	elseif data.event == websocket.EVENT_ERROR then
+		print("Error: '" .. data.message .. "'")
+
+	elseif data.event == websocket.EVENT_MESSAGE then
+		handle_message(self, data.message)
+	end
+end
+
+
+function on_input(self, action_id, action)
+	if action_id == hash("text") then
+		self.other_id = self.other_id .. action.text
+		
+		if #self.other_id > 2 then
+			self.other_id = action.text
+		end
+		
+		gui.set_text(gui.get_node("input"), "OTHER ID: " .. self.other_id)
+	elseif action_id == hash("enter") then
+		webrtc.create_channel(tonumber(self.other_id), "main", webrtc.TYPE_RELIABLE)
+	end
+end
+
+
+function init(self)
+	msg.post(".", "acquire_input_focus")
+
+	self.connection = nil
+	self.other_id = ""
+	websocket.connect("SERVER_URL_HERE", {}, websocket_callback)
+end

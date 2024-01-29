@@ -1,0 +1,11 @@
+[project]
+title = extension-webrtc
+dependencies#0 = https://github.com/defold/extension-websocket/archive/refs/tags/3.1.0.zip
+
+[bootstrap]
+main_collection = /examples/example.collectionc
+
+[display]
+width = 1280
+height = 720
+

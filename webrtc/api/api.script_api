@@ -1,0 +1,126 @@
+- name: webrtc
+  type: table
+  desc: Functions and constants for using webrtc. Supported only on web.
+  members:
+
+#*****************************************************************************************************
+
+  - name: set_configuration
+    type: function
+    desc: Sets the configuration for the peer connection
+    parameters:
+      - name: ice_servers
+        type: string
+        desc: A string containg a list of stun or turn servers (eg "stun_url:PORT;turn_url:PORT:USER:PASSWORD"), a section is delimited by ';' and subdivided by ':'
+        
+      - name: signaling_data_callback
+        type: function
+        desc: callback that receives all connection data from webrtc
+        parameters:
+        - name: self
+          type: object
+          desc: The script instance that was used to register the callback
+        
+        - name: data
+          type: string
+          desc: The signaling data that needs to be send to the other peer during the connection
+      
+      - name: channel_info_callback
+        type: function
+        desc: callback that will be called uppon succesfully opening or closing a datachannel with a peer
+        parameters:
+        - name: self
+          type: object
+          desc: The script instance that was used to register the callback
+        
+        - name: event
+          type: string
+          desc: Indicates the status of the channel, can be either "opened" or "closed"
+        
+        - name: id
+          type: number
+          desc: The id of the peer the datachannel was open to
+        
+        - name: label
+          type: string
+          desc: The label of the datachannel that just opened
+      
+      - name: message_info_callback
+        type: function
+        desc: callback that will be called uppon receiving a message from a datachannel
+        parameters:
+        - name: self
+          type: object
+          desc: The script instance that was used to register the callback
+        
+        - name: id
+          type: number
+          desc: The id of the peer that sended the message
+        
+        - name: label
+          type: string
+          desc: The label of the channel that brought the message
+        
+        - name: message
+          type: string
+          desc: The message that was received
+
+#*****************************************************************************************************
+
+  - name: process_data
+    type: function
+    desc: Processes the signaling data that was received by a peer.
+    parameters:
+    - name: data
+      type: string
+      desc: The data that needs to be processed.
+
+#*****************************************************************************************************
+
+  - name: create_channel
+    type: function
+    desc: Creates a datachannel with a specified peer and type
+    parameters:
+    - name: id
+      type: number
+      desc: The id for which the datachannel is to be created
+
+    - name: label
+      type: string
+      desc: The label for the datachannel
+
+    - name: type
+      type: int
+      desc: The type of the datachannel, it can be any of the TYPE_* constants
+
+#*****************************************************************************************************
+
+  - name: send_message
+    type: function
+    desc: Sends a message to a peer by a channel
+    parameters:
+    - name: id
+      type: number
+      desc: The id to which the message is to be sent
+
+    - name: label
+      type: string
+      desc: The label of the channel to be used, the datachannel needs to be already created
+
+    - name: message
+      type: string
+      desc: The message to send
+
+#*****************************************************************************************************
+
+  - name: TYPE_UNRELIABLE
+    type: number
+    desc: An unreliable DataChannel connection with unordered packets
+
+  - name: TYPE_UNRELIABLE_ORDERED
+    type: number
+    desc: An unreliable DataChannel connection with ordered packets
+
+  - name: TYPE_RELIABLE
+    type: number
+    desc: A reliable DataChannel connection with ordered packets

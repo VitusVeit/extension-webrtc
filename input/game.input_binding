@@ -1,0 +1,8 @@
+key_trigger {
+  input: KEY_ENTER
+  action: "enter"
+}
+text_trigger {
+  input: TEXT
+  action: "text"
+}
