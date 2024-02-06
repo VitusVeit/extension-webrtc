@@ -9,3 +9,6 @@ main_collection = /examples/example.collectionc
 width = 1280
 height = 720
 
+[library]
+include_dirs = webrtc
+
