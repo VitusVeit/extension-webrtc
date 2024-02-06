@@ -18,9 +18,7 @@ std::unordered_map<int, std::shared_ptr<rtc::PeerConnection>> peer_connection_ma
 std::unordered_map<int, std::unordered_map<std::string, std::shared_ptr<rtc::DataChannel>>> data_channel_map;
 
 
-dmScript::LuaCallbackInfo* on_signaling_data = 0;
-dmScript::LuaCallbackInfo* on_channel_info = 0;
-dmScript::LuaCallbackInfo* on_message_info = 0;
+dmScript::LuaCallbackInfo* webrtc_callback = NULL;
 
 
 enum Type
@@ -31,13 +29,16 @@ enum Type
 };
 
 
-std::vector<std::string> split_message(std::string s, bool remove_last = false);
+enum Event
+{
+	EVENT_CHANNEL_OPENED,
+	EVENT_CHANNEL_CLOSED,
+	EVENT_SIGNALING_DATA,
+	EVENT_MESSAGE,
+};
 
-void HandleSignalingData(std::string data);
 
-void HandleChannelInfo(const std::string& event, int id, const std::string& label);
-
-void HandleMessage(int id, std::string label, std::string message);
+void HandleCallback(int event, int id, std::string label, std::string data = "");
 
 static std::shared_ptr<rtc::PeerConnection> create_peer(int id);
 

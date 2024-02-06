@@ -1,9 +1,5 @@
-name: webrtc
+name: WebRTC
 platforms:
-    web:
+    common:
         context:
             flags: ["-std=c++17"]
-    win32:
-        context:
-            flags: ["-std=c++17"]
-            defines: ["NO_MEDIA", "NO_WEBSOCKET"]

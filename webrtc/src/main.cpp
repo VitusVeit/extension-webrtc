@@ -1,13 +1,13 @@
 // Extension lib defines
-#define EXTENSION_NAME webrtc
-#define LIB_NAME "webrtc"
-#define MODULE_NAME LIB_NAME
+#define LIB_NAME "WebRTC"
+#define MODULE_NAME "webrtc"
 
 // Defold SDK
 #define DLIB_LOG_DOMAIN LIB_NAME
 #include <dmsdk/sdk.h>
 
 #include "main.hpp"
+
 
 std::vector<std::string> split(std::string string, const std::string& delimiter)
 {
@@ -30,85 +30,56 @@ std::vector<std::string> split(std::string string, const std::string& delimiter)
 }
 
 
-void HandleSignalingData(std::string data)
-{    
-    if (!dmScript::IsCallbackValid(on_signaling_data))
-    {
-        dmLogError("Data callback is invalid");
-        return;
-    }
-    
-    // Call Callback to send data.
-    lua_State* L = dmScript::GetCallbackLuaContext(on_signaling_data);
-    DM_LUA_STACK_CHECK(L, 0);
-
-    if (!dmScript::SetupCallback(on_signaling_data))
-    {
-        dmLogError("Failed to setup data callback");
-        return;
-    }
-
-    lua_pushstring(L, data.c_str());
-
-    dmScript::PCall(L, 2, 0);
-
-    dmScript::TeardownCallback(on_signaling_data);
-}
-
-
-void HandleChannelInfo(const std::string& event, int id, const std::string& label)
+void HandleCallback(int event, int id, std::string label, std::string data)
 {
-    if (!dmScript::IsCallbackValid(on_channel_info))
+    if (!dmScript::IsCallbackValid(webrtc_callback))
     {
-        dmLogError("On channel open callback is invalid");
-        return;
-    }
-    
-    // Call Callback to send candidate.
-    lua_State* L = dmScript::GetCallbackLuaContext(on_channel_info);
-    DM_LUA_STACK_CHECK(L, 0);
-
-    if (!dmScript::SetupCallback(on_channel_info))
-    {
-        dmLogError("Failed to setup on channel open callback");
-        return;
-    }
-
-    lua_pushstring(L, event.c_str());
-    lua_pushnumber(L, id);
-    lua_pushstring(L, label.c_str());
-
-    dmScript::PCall(L, 4, 0);
-
-    dmScript::TeardownCallback(on_channel_info);
-}
-
-
-void HandleMessage(int id, std::string label, std::string message)
-{
-    if (!dmScript::IsCallbackValid(on_message_info))
-    {
-        dmLogError("Message callback is invalid");
+        dmLogError("WebRTC callback is invalid");
         return;
     }
 
     // Call Callback to get message.
-    lua_State* L = dmScript::GetCallbackLuaContext(on_message_info);
+    lua_State* L = dmScript::GetCallbackLuaContext(webrtc_callback);
     DM_LUA_STACK_CHECK(L, 0);
 
-    if (!dmScript::SetupCallback(on_message_info))
+    if (!dmScript::SetupCallback(webrtc_callback))
     {
-        dmLogError("Failed to setup message callback");
+        dmLogError("Failed to setup WebRTC callback");
         return;
     }
 
-    lua_pushnumber(L, lua_Number(id));
-    lua_pushstring(L, label.c_str());
-    lua_pushstring(L, message.c_str());
+    lua_pushnumber(L, lua_Number(event));
 
-    dmScript::PCall(L, 4, 0);
+    lua_newtable(L);
+    
+    if (event < EVENT_CHANNEL_OPENED or event > EVENT_MESSAGE)
+    {
+        dmLogError("Expected an EVENT_* enum for WebRTC callback (got %d)", event);
+    }
+    
+    if (event != EVENT_SIGNALING_DATA)
+    {    
+        lua_pushnumber(L, id);
+        lua_setfield(L, -2, "id");
 
-    dmScript::TeardownCallback(on_message_info);
+        lua_pushstring(L, label.c_str());
+        lua_setfield(L, -2, "label");
+    }
+
+    if (event == EVENT_SIGNALING_DATA)
+    {
+        lua_pushstring(L, data.c_str());
+        lua_setfield(L, -2, "signaling");
+    }
+    else if (event == EVENT_MESSAGE)
+    {
+        lua_pushstring(L, data.c_str());
+        lua_setfield(L, -2, "msg");
+    }
+
+    dmScript::PCall(L, 3, 0);
+
+    dmScript::TeardownCallback(webrtc_callback);
 }
 
 
@@ -134,7 +105,7 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
         description.typeString() + "@EOS@" +
         std::string(description);
         
-        HandleSignalingData(message);
+        HandleCallback(EVENT_SIGNALING_DATA, 0, "", message);
     });
 
     pc->onLocalCandidate([id](rtc::Candidate candidate)
@@ -150,7 +121,7 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
         std::string(candidate) + "@EOS@" +
         candidate.mid();
 
-        HandleSignalingData(message);
+        HandleCallback(EVENT_SIGNALING_DATA, 0, "", message);
     });
 
     pc->onDataChannel([id](std::shared_ptr<rtc::DataChannel> dc)
@@ -159,13 +130,12 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
 
         dc->onOpen([id, dc]()
         {
-            HandleChannelInfo("opened", id, dc->label());
+            HandleCallback(EVENT_CHANNEL_OPENED, id, dc->label());
         });
 
         dc->onClosed([id, dc]()
         { 
-            dmLogDebug("DataChannel from %d closed", id); 
-            HandleChannelInfo("closed", id, dc->label());
+            HandleCallback(EVENT_CHANNEL_CLOSED, id, dc->label());
         });
 
         dc->onMessage([id, dc](auto data)
@@ -173,7 +143,7 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
             // Data holds either std::string or rtc::binary.
             if (std::holds_alternative<std::string>(data))
             {
-                HandleMessage(id, dc->label(), std::get<std::string>(data));
+                HandleCallback(EVENT_MESSAGE, id, dc->label(), std::get<std::string>(data));
             }
             else
                 dmLogWarning("Binary message from %d received, size = %lu", id, std::get<rtc::binary>(data).size());
@@ -202,7 +172,12 @@ static void create_channel(int id, std::string label, int type)
     
     // We are the offerer, so create a data channel to initiate the process.
     dmLogDebug("Creating DataChannel with label \"%s\"", label.c_str());
-
+    
+    if (type < TYPE_UNRELIABLE or type > TYPE_RELIABLE)
+    {
+        dmLogError("Expected a TYPE_* enum on 'create_channel'  (got %d)", type);
+    }
+    
     rtc::Reliability rel;
     
     // NOTE: 
@@ -231,13 +206,12 @@ static void create_channel(int id, std::string label, int type)
 
     dc->onOpen([id, dc]() 
     {
-        HandleChannelInfo("opened", id, dc->label());
+        HandleCallback(EVENT_CHANNEL_OPENED, id, dc->label());
     });
 
     dc->onClosed([id, dc]()
     {
-        dmLogDebug("DataChannel from %d closed", id); 
-        HandleChannelInfo("closed", id, dc->label());
+        HandleCallback(EVENT_CHANNEL_CLOSED, id, dc->label());
     });
 
     dc->onMessage([id, dc](auto data)
@@ -245,7 +219,7 @@ static void create_channel(int id, std::string label, int type)
         // Data holds either std::string or rtc::binary.
         if (std::holds_alternative<std::string>(data))
         {
-            HandleMessage(id, dc->label(), std::get<std::string>(data));
+            HandleCallback(EVENT_MESSAGE, id, dc->label(), std::get<std::string>(data));
         }
         else
             dmLogWarning("Binary message from %d received, size = %ld", id, std::get<rtc::binary>(data).size());
@@ -260,8 +234,6 @@ static void process_data(std::string message)
     message.erase(remove(message.begin(), message.end(), '\"'),message.end());
 
     std::vector<std::string> data = split(message, "@EOS@");
-
-    dmLogDebug("== GOT ==\n%s", message.c_str());
     
     int id = std::stoi(data[0]);
     std::string type = data[1];
@@ -278,7 +250,7 @@ static void process_data(std::string message)
         pc = create_peer(id);
     } 
     else
-        dmLogError("Received description of type '%s', but there isn't any peer connection in place (didn't receive an offer first)");
+        dmLogError("Received data of type '%s' from peer %d, but there isn't any peer connection in place (didn't receive an offer first)", type.c_str(), id);
 
     if (type == "offer" || type == "answer") 
     {
@@ -329,9 +301,7 @@ static int LuaSetConfiguration(lua_State* L)
             dmLogError("Expected 2 or 4 arguments for an ice server entry, got %lu, on \'set_configuration\'", zone.size());
     }
 
-    on_signaling_data = dmScript::CreateCallback(L, 2);
-    on_channel_info = dmScript::CreateCallback(L, 3);
-    on_message_info = dmScript::CreateCallback(L, 4);  
+    webrtc_callback = dmScript::CreateCallback(L, 2);  
     
     return 0;
 }
@@ -400,6 +370,11 @@ static void LuaInit(lua_State* L)
     SET_CONSTANT(TYPE_UNRELIABLE);
     SET_CONSTANT(TYPE_UNRELIABLE_ORDERED);
     SET_CONSTANT(TYPE_RELIABLE);
+
+    SET_CONSTANT(EVENT_CHANNEL_OPENED);
+    SET_CONSTANT(EVENT_CHANNEL_CLOSED);
+    SET_CONSTANT(EVENT_SIGNALING_DATA);
+    SET_CONSTANT(EVENT_MESSAGE);
     
     lua_pop(L, 1);
     assert(top == lua_gettop(L));
@@ -418,9 +393,8 @@ static dmExtension::Result InitializeExtension(dmExtension::Params* params)
     return dmExtension::RESULT_OK;
 }
 
-//#else
+/*#else
 
-/*
 static dmExtension::Result AppInitializeExtension(dmExtension::AppParams* params)
 {
     dmLogWarning("Registered %s (null) extension", MODULE_NAME);
@@ -431,9 +405,8 @@ static dmExtension::Result InitializeExtension(dmExtension::Params* params)
 {
     return dmExtension::RESULT_OK;
 }
-*/
 
-//#endif
+#endif*/
 
 static dmExtension::Result AppFinalizeExtension(dmExtension::AppParams* params)
 {
@@ -445,4 +418,4 @@ static dmExtension::Result FinalizeExtension(dmExtension::Params* params)
     return dmExtension::RESULT_OK;
 }
 
-DM_DECLARE_EXTENSION(EXTENSION_NAME, LIB_NAME, AppInitializeExtension, AppFinalizeExtension, InitializeExtension, 0, 0, FinalizeExtension)
+DM_DECLARE_EXTENSION(WebRTC, LIB_NAME, AppInitializeExtension, AppFinalizeExtension, InitializeExtension, 0, 0, FinalizeExtension)

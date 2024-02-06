@@ -1,25 +1,22 @@
-
 function send_message(self, data)
 	websocket.send(self.connection, json.encode({ data = data }), { type = websocket.DATA_TYPE_TEXT })
 end
 
 
-local function on_signaling_data(self, dump)
-	send_message(self, dump)
-end
+function webrtc_callback(self, event, data)
+	if event == webrtc.EVENT_CHANNEL_OPENED then
+		print(string.format("Data channel \'%s\' with %d opened!", data.label, data.id))
+		webrtc.send_message(data.id, data.label, "Hello!")
 
+	elseif event == webrtc.EVENT_CHANNEL_CLOSED then
+		print(string.format("Data channel \'%s\' with %d closed!", data.label, data.id))
 
-local function on_channel_open(self, event, id, label)
-	if event == "opened" then
-		print(string.format("Data channel \'%s\' with %d opened!", label, id))
-	elseif event == "closed" then
-		print(string.format("Data channel \'%s\' with %d closed!", label, id))
+	elseif event == webrtc.EVENT_SIGNALING_DATA then
+		send_message(self, data.signaling)
+
+	elseif event == webrtc.EVENT_MESSAGE then
+		print(string.format("[%s](\'%s\'): %s", data.id, data.label, data.msg))
 	end
-end
-
-
-local function got_message(self, id, label, msg)
-	print(string.format("[%s](\'%s\'): %s", id, label, msg))
 end
 
 
@@ -31,7 +28,7 @@ function handle_message(self, message)
 		self.local_id = message.data
 		print("Got ID from server!")
 		gui.set_text(gui.get_node("desc"), string.format("Type the other peer id to connect. Your ID: %d", message.data))
-		webrtc.set_configuration("", on_signaling_data, on_channel_open, got_message)
+		webrtc.set_configuration("stun_url:PORT;turn_url:PORT:USER:PASSWORD", webrtc_callback)
 	elseif type == "connection" then
 		webrtc.process_data(message.data)
 	end
@@ -76,5 +73,5 @@ function init(self)
 
 	self.connection = nil
 	self.other_id = ""
-	websocket.connect("SERVER_URL_HERE", {}, websocket_callback)
+	websocket.connect("server_url", {}, websocket_callback)
 end
