@@ -15,7 +15,7 @@
 #include <cstdlib>
 
 
-#if !defined(DM_PLATFORM_WINDOWS)
+#if defined(DM_PLATFORM_HTML5)
 static std::vector<rtc::IceServer> BuildIceServers()
 {
     std::vector<rtc::IceServer> servers;
@@ -45,7 +45,7 @@ static rtc::Configuration BuildConfiguration()
 }
 #endif
 
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
 static inline void* ToUserPtr(int value)
 {
     return reinterpret_cast<void*>(static_cast<intptr_t>(value));
@@ -252,7 +252,7 @@ void HandleCallback(int event, int id, std::string label, std::string data)
 }
 
 
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
 static int create_peer(int id)
 {
     std::vector<std::string> urls;
@@ -381,7 +381,7 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
 
 static void create_channel(int id, std::string label, int type)
 {
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
     if (auto jt = data_channel_map[id].find(label); jt != data_channel_map[id].end())
         return;
 
@@ -517,7 +517,7 @@ static void create_channel(int id, std::string label, int type)
 
 static void process_data(std::string message)
 {
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
     message.erase(remove(message.begin(), message.end(), '"'),message.end());
 
     std::vector<std::string> data = split(message, "@EOS@");
@@ -638,7 +638,7 @@ static void process_data(std::string message)
 
 static void send_message(int id, std::string label, std::string message)
 {
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
     if (not data_channel_map.count(id)) {
         dmLogError("No peer found with id %d on \'send_message\'", id);
         return;
