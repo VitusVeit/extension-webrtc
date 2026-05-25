@@ -22,7 +22,7 @@
 
 #include "websocket.hpp"
 
-#include <emscripten.h>
+#include <emscripten/emscripten.h>
 
 #include <exception>
 #include <memory>
@@ -34,6 +34,8 @@ extern void wsSetOpenCallback(int ws, void (*openCallback)(void *));
 extern void wsSetErrorCallback(int ws, void (*errorCallback)(const char *, void *));
 extern void wsSetMessageCallback(int ws, void (*messageCallback)(const char *, int, void *));
 extern int wsSendMessage(int ws, const char *buffer, int size);
+extern char *wsGetWebSocketUrl(int ws);
+extern int wsGetWebSocketState(int ws);
 extern void wsSetUserPointer(int ws, void *ptr);
 }
 
@@ -76,8 +78,8 @@ void WebSocket::open(const string &url) {
 	close();
 
 	mId = wsCreateWebSocket(url.c_str());
-	//if (!mId)
-	//	throw std::runtime_error("WebSocket not supported");
+	if (!mId)
+		return;
 
 	wsSetUserPointer(mId, this);
 	wsSetOpenCallback(mId, OpenCallback);
@@ -117,9 +119,51 @@ bool WebSocket::send(const byte *data, size_t size) {
 	return wsSendMessage(mId, reinterpret_cast<const char *>(data), int(size)) >= 0;
 }
 
+WebSocket::State WebSocket::readyState() const {
+	if (!mId)
+		return State::Closed;
+
+	return static_cast<State>(wsGetWebSocketState(mId));
+}
+
+optional<string> WebSocket::url() const {
+	if (mId) {
+		char *url = wsGetWebSocketUrl(mId);
+		if (url) {
+			string result(url);
+			free(url);
+			return result;
+		}
+	}
+	return std::nullopt;
+}
+
 void WebSocket::triggerOpen() {
 	mConnected = true;
 	Channel::triggerOpen();
+}
+
+std::ostream &operator<<(std::ostream &out, WebSocket::State state) {
+	using State = WebSocket::State;
+	const char *str;
+	switch (state) {
+	case State::Connecting:
+		str = "connecting";
+		break;
+	case State::Open:
+		str = "open";
+		break;
+	case State::Closing:
+		str = "closing";
+		break;
+	case State::Closed:
+		str = "closed";
+		break;
+	default:
+		str = "unknown";
+		break;
+	}
+	return out << str;
 }
 
 } // namespace rtc

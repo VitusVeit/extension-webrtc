@@ -20,29 +20,45 @@
  * SOFTWARE.
  */
 
-#ifndef RTC_CANDIDATE_H
-#define RTC_CANDIDATE_H
+#ifndef RTC_DATACHANNEL_H
+#define RTC_DATACHANNEL_H
 
+#include "channel.hpp"
 #include "common.hpp"
-
-#include <iostream>
+#include "reliability.hpp"
 
 namespace rtc {
 
-class Candidate {
+class DataChannel final : public Channel {
 public:
-	Candidate(const string &candidate, const string &mid);
-	string candidate() const;
-	string mid() const;
-	operator string() const;
+	explicit DataChannel(int id);
+	~DataChannel();
+
+	void close() override;
+	bool send(message_variant data) override;
+	bool send(const byte *data, size_t size) override;
+
+	bool isOpen() const override;
+	bool isClosed() const override;
+	size_t bufferedAmount() const override;
+	string label() const;
+	Reliability reliability() const;
+
+	void setBufferedAmountLowThreshold(size_t amount) override;
 
 private:
-	string mCandidate;
-	string mMid;
+	void triggerOpen() override;
+
+	int mId;
+	string mLabel;
+	bool mConnected;
+
+	static void OpenCallback(void *ptr);
+	static void ErrorCallback(const char *error, void *ptr);
+	static void MessageCallback(const char *data, int size, void *ptr);
+	static void BufferedAmountLowCallback(void *ptr);
 };
 
 } // namespace rtc
 
-std::ostream &operator<<(std::ostream &out, const rtc::Candidate &candidate);
-
-#endif // RTC_CANDIDATE_H
+#endif // RTC_DATACHANNEL_H

@@ -27,7 +27,7 @@ class Peer:
         }))
 
 
-async def handle_websocket(websocket, path):
+async def handle_websocket(websocket, path=None):
     client_id = None
     
     try:

@@ -20,43 +20,52 @@
  * SOFTWARE.
  */
 
-#ifndef RTC_DATACHANNEL_H
-#define RTC_DATACHANNEL_H
+#ifndef RTC_WEBSOCKET_H
+#define RTC_WEBSOCKET_H
 
 #include "channel.hpp"
 #include "common.hpp"
 
 namespace rtc {
 
-class DataChannel final : public Channel {
+// WebSocket wrapper for emscripten
+class WebSocket final : public Channel {
 public:
-	explicit DataChannel(int id);
-	~DataChannel();
+	enum class State : int {
+		Connecting = 0,
+		Open = 1,
+		Closing = 2,
+		Closed = 3,
+	};
 
+	WebSocket();
+	~WebSocket();
+
+	void open(const string &url);
 	void close() override;
 	bool send(message_variant data) override;
 	bool send(const byte *data, size_t size) override;
 
+	State readyState() const;
+
 	bool isOpen() const override;
 	bool isClosed() const override;
-	size_t bufferedAmount() const override;
-	string label() const;
 
-	void setBufferedAmountLowThreshold(size_t amount) override;
+	optional<string> url() const;
 
 private:
 	void triggerOpen() override;
 
 	int mId;
-	string mLabel;
 	bool mConnected;
 
 	static void OpenCallback(void *ptr);
 	static void ErrorCallback(const char *error, void *ptr);
 	static void MessageCallback(const char *data, int size, void *ptr);
-	static void BufferedAmountLowCallback(void *ptr);
 };
+
+std::ostream &operator<<(std::ostream &out, WebSocket::State state);
 
 } // namespace rtc
 
-#endif // RTC_DATACHANNEL_H
+#endif // RTC_WEBSOCKET_H

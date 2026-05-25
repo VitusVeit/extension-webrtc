@@ -20,38 +20,30 @@
  * SOFTWARE.
  */
 
-#ifndef RTC_DESCRIPTION_H
-#define RTC_DESCRIPTION_H
+#ifndef RTC_RELIABILITY_H
+#define RTC_RELIABILITY_H
 
 #include "common.hpp"
 
-#include <iostream>
+#include <chrono>
 
 namespace rtc {
 
-class Description {
-public:
-	enum class Type { Unspec, Offer, Answer, Pranswer, Rollback };
+struct Reliability {
+	// It true, the channel does not enforce message ordering and out-of-order delivery is allowed
+	bool unordered = false;
 
-	Description(const string &sdp, Type type);
-	Description(const string &sdp, string typeString);
+	// If both maxPacketLifeTime or maxRetransmits are unset, the channel is reliable.
+	// If either maxPacketLifeTime or maxRetransmits is set, the channel is unreliable.
+	// (The settings are exclusive so both maxPacketLifetime and maxRetransmits must not be set.)
 
-	Type type() const;
-	string typeString() const;
+	// Time window during which transmissions and retransmissions may occur
+	optional<std::chrono::milliseconds> maxPacketLifeTime;
 
-	operator string() const;
-
-	static Type stringToType(const string &typeString);
-	static string typeToString(Type type);
-
-private:
-	string mSdp;
-	string mType;
+	// Maximum number of retransmissions that are attempted
+	optional<unsigned int> maxRetransmits;
 };
 
 } // namespace rtc
 
-std::ostream &operator<<(std::ostream &out, const rtc::Description &description);
-std::ostream &operator<<(std::ostream &out, rtc::Description::Type type);
-
-#endif // RTC_DESCRIPTION_H
+#endif // RTC_RELIABILITY_H

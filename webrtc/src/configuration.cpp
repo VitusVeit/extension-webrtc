@@ -22,7 +22,24 @@
 
 #include "configuration.hpp"
 
+#include <cerrno>
+#include <cstdlib>
+
 namespace rtc {
+
+static bool parsePort(const string &service, uint16_t *outPort) {
+	if (!outPort || service.empty())
+		return false;
+
+	char *end = nullptr;
+	errno = 0;
+	unsigned long value = std::strtoul(service.c_str(), &end, 10);
+	if (errno != 0 || end == service.c_str() || *end != '\0' || value > 65535)
+		return false;
+
+	*outPort = static_cast<uint16_t>(value);
+	return true;
+}
 
 IceServer::IceServer(const string &url) : hostname(url), port(0), type(Type::Dummy) {}
 
@@ -31,11 +48,11 @@ IceServer::IceServer(string hostname_, uint16_t port_)
 
 IceServer::IceServer(string hostname_, string service_)
     : hostname(std::move(hostname_)), type(Type::Stun) {
-	//try {
-		port = uint16_t(std::stoul(service_));
-	//} catch (...) {
-	//	throw std::invalid_argument("Invalid ICE server port: " + service_);
-	//}
+	uint16_t parsedPort = 0;
+	if (parsePort(service_, &parsedPort))
+		port = parsedPort;
+    else
+		port = 0;
 }
 
 IceServer::IceServer(string hostname_, uint16_t port_, string username_, string password_,
@@ -47,11 +64,11 @@ IceServer::IceServer(string hostname_, string service_, string username_, string
                      RelayType relayType_)
     : hostname(std::move(hostname_)), type(Type::Turn), username(std::move(username_)),
       password(std::move(password_)), relayType(relayType_) {
-	//try {
-		port = uint16_t(std::stoul(service_));
-	//} catch (...) {
-	//	throw std::invalid_argument("Invalid ICE server port: " + service_);
-	//}
+	uint16_t parsedPort = 0;
+	if (parsePort(service_, &parsedPort))
+		port = parsedPort;
+    else
+		port = 0;
 }
 
 } // namespace rtc

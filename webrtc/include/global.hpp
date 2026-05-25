@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017-2022 Paul-Louis Ageneau
+ * Copyright (c) 2017-2024 Paul-Louis Ageneau
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,40 +20,36 @@
  * SOFTWARE.
  */
 
-#ifndef RTC_INCLUDE_H
-#define RTC_INCLUDE_H
+#ifndef RTC_GLOBAL_H
+#define RTC_GLOBAL_H
 
-#include <cstddef>
-#include <memory>
-#include <optional>
-#include <stdexcept>
-#include <string>
-#include <variant>
-#include <vector>
+#include "common.hpp"
+
+#include <future>
+#include <iostream>
 
 namespace rtc {
 
-using std::byte;
-using std::nullopt;
-using std::optional;
-using std::shared_ptr;
-using std::string;
-using std::unique_ptr;
-using std::variant;
-using std::weak_ptr;
+enum class LogLevel {
+	None = 0,
+	Fatal = 1,
+	Error = 2,
+	Warning = 3,
+	Info = 4,
+	Debug = 5,
+	Verbose = 6
+};
 
-using binary = std::vector<byte>;
-using message_variant = std::variant<binary, string>;
+typedef std::function<void(LogLevel level, string message)> LogCallback;
 
-using std::size_t;
-using std::uint16_t;
-using std::uint32_t;
-using std::uint64_t;
-using std::uint8_t;
+// Dummy function for compatibility with libdatachannel
+void InitLogger(LogLevel level, LogCallback callback = nullptr);
+void Preload();
+std::shared_future<void> Cleanup();
 
-template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+std::ostream &operator<<(std::ostream &out, LogLevel level);
 
 } // namespace rtc
 
-#endif // RTC_INCLUDE_H
+#endif
+

@@ -10,3 +10,4 @@ builtins
 .internal
 .vscode
 *.der
+.venv
