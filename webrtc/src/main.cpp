@@ -198,22 +198,6 @@ std::vector<std::string> split(std::string string, const std::string& delimiter)
     return result;
 }
 
-// we can't use std::atoi since that throws an exception, and exceptions are disabled
-static bool parse_int(const std::string& value, int* out)
-{
-    if (!out || value.empty())
-        return false;
-
-    char* end = nullptr;
-    errno = 0;
-    long parsed = std::strtol(value.c_str(), &end, 10);
-    if (errno != 0 || end == value.c_str() || *end != '\0')
-        return false;
-
-    *out = (int)parsed;
-    return true;
-}
-
 
 void HandleCallback(int event, int id, std::string label, std::string data)
 {
@@ -543,12 +527,7 @@ static void process_data(std::string message)
         return;
     }
 
-    int id = 0;
-    if (!parse_int(data[0], &id))
-    {
-        dmLogError("Invalid peer id '%s' in signaling payload", data[0].c_str());
-        return;
-    }
+    int id = std::stoi(data[0]);
 
     const std::string type = data[1];
 
@@ -609,12 +588,7 @@ static void process_data(std::string message)
         return;
     }
     
-    int id = 0;
-    if (!parse_int(data[0], &id))
-    {
-        dmLogError("Invalid peer id '%s' in signaling payload", data[0].c_str());
-        return;
-    }
+    int id = std::stoi(data[0]);
 
     std::string type = data[1];
 
@@ -709,16 +683,10 @@ static int LuaSetConfiguration(lua_State* L)
     for (std::string& section : result)
     {
         std::vector<std::string> zone = split(section, ":");
-        int port = 0;
+        int port = std::stoi(zone[1]);
 
         if (zone.size() == 2)
         {
-            if (!parse_int(zone[1], &port))
-            {
-                dmLogError("Invalid port '%s' in ice server entry '%s'", zone[1].c_str(), section.c_str());
-                continue;
-            }
-
             IceServerEntry entry;
             entry.hostname = zone[0];
             entry.port = (uint16_t)port;
@@ -727,12 +695,6 @@ static int LuaSetConfiguration(lua_State* L)
         }
         else if (zone.size() == 4)
         {
-            if (!parse_int(zone[1], &port))
-            {
-                dmLogError("Invalid port '%s' in ice server entry '%s'", zone[1].c_str(), section.c_str());
-                continue;
-            }
-
             IceServerEntry entry;
             entry.hostname = zone[0];
             entry.port = (uint16_t)port;
