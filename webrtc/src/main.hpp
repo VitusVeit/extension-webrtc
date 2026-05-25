@@ -1,9 +1,9 @@
 // The datachannel library.
 #if defined(DM_PLATFORM_HTML5)
 #include <emscripten.h>
-#include "rtc.hpp"
+#include "rtc-wasm/rtc.hpp"
 #else
-#include "libdatachannel/rtc.hpp"
+#include "rtc/rtc.hpp"
 #endif
 
 
