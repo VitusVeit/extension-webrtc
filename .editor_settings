@@ -1,0 +1,22 @@
+{
+  :code {
+    :breakpoints [
+    ]
+  }
+  :workflow {
+    :open-tabs [
+      [
+        [
+          "/examples/example.gui"
+          :scene
+        ]
+      ]
+    ]
+    :recent-files [
+      [
+        "/examples/example.gui"
+        :scene
+      ]
+    ]
+  }
+}

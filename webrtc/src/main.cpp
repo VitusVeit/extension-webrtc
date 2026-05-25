@@ -3,10 +3,14 @@
 #define MODULE_NAME "webrtc"
 
 // Defold SDK
+#ifndef DLIB_LOG_DOMAIN
 #define DLIB_LOG_DOMAIN LIB_NAME
+#endif
 #include <dmsdk/sdk.h>
 
 #include "main.hpp"
+#include <cerrno>
+#include <cstdlib>
 
 
 std::vector<std::string> split(std::string string, const std::string& delimiter)
@@ -27,6 +31,22 @@ std::vector<std::string> split(std::string string, const std::string& delimiter)
         result.push_back(string);
 
     return result;
+}
+
+
+static bool parse_int(const std::string& value, int* out)
+{
+    if (!out || value.empty())
+        return false;
+
+    char* end = nullptr;
+    errno = 0;
+    long parsed = std::strtol(value.c_str(), &end, 10);
+    if (errno != 0 || end == value.c_str() || *end != '\0')
+        return false;
+
+    *out = (int)parsed;
+    return true;
 }
 
 
@@ -234,8 +254,19 @@ static void process_data(std::string message)
     message.erase(remove(message.begin(), message.end(), '\"'),message.end());
 
     std::vector<std::string> data = split(message, "@EOS@");
+    if (data.size() < 2)
+    {
+        dmLogError("Invalid signaling payload '%s'", message.c_str());
+        return;
+    }
     
-    int id = std::stoi(data[0]);
+    int id = 0;
+    if (!parse_int(data[0], &id))
+    {
+        dmLogError("Invalid peer id '%s' in signaling payload", data[0].c_str());
+        return;
+    }
+
     std::string type = data[1];
 
     std::shared_ptr<rtc::PeerConnection> pc;
@@ -250,15 +281,30 @@ static void process_data(std::string message)
         pc = create_peer(id);
     } 
     else
+    {
         dmLogError("Received data of type '%s' from peer %d, but there isn't any peer connection in place (didn't receive an offer first)", type.c_str(), id);
+        return;
+    }
 
     if (type == "offer" || type == "answer") 
     {
+        if (data.size() < 3)
+        {
+            dmLogError("Invalid %s payload from peer %d", type.c_str(), id);
+            return;
+        }
+
         auto sdp = data[2];
         pc->setRemoteDescription(rtc::Description(sdp, type));
     } 
     else if (type == "candidate") 
     {
+        if (data.size() < 4)
+        {
+            dmLogError("Invalid candidate payload from peer %d", id);
+            return;
+        }
+
         auto sdp = data[2];
         auto mid = data[3];
         pc->addRemoteCandidate(rtc::Candidate(sdp, mid));
@@ -292,11 +338,28 @@ static int LuaSetConfiguration(lua_State* L)
     for (std::string& section : result)
     {
         std::vector<std::string> zone = split(section, ":");
+        int port = 0;
 
         if (zone.size() == 2)
-            configuration.iceServers.push_back(rtc::IceServer(zone[0].c_str(), std::stoi(zone[1])));
+        {
+            if (!parse_int(zone[1], &port))
+            {
+                dmLogError("Invalid port '%s' in ice server entry '%s'", zone[1].c_str(), section.c_str());
+                continue;
+            }
+
+            configuration.iceServers.push_back(rtc::IceServer(zone[0].c_str(), port));
+        }
         else if (zone.size() == 4)
-            configuration.iceServers.push_back(rtc::IceServer(zone[0].c_str(), std::stoi(zone[1]), zone[2].c_str(), zone[3].c_str()));
+        {
+            if (!parse_int(zone[1], &port))
+            {
+                dmLogError("Invalid port '%s' in ice server entry '%s'", zone[1].c_str(), section.c_str());
+                continue;
+            }
+
+            configuration.iceServers.push_back(rtc::IceServer(zone[0].c_str(), port, zone[2].c_str(), zone[3].c_str()));
+        }
         else
             dmLogError("Expected 2 or 4 arguments for an ice server entry, got %lu, on \'set_configuration\'", zone.size());
     }
