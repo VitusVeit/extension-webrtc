@@ -51,12 +51,13 @@
 			var webSocket = WEBSOCKET.map[ws];
 			if(webSocket) {
 				webSocket.close();
-				webSocket.wsUserDeleted = true;
+				webSocket.rtcUserDeleted = true;
 				delete WEBSOCKET.map[ws];
 			}
 		},
 
 		wsSetOpenCallback: function(ws, openCallback) {
+			if (!ws) return;
 			var webSocket = WEBSOCKET.map[ws];
 			var cb = function() {
 				if(webSocket.rtcUserDeleted) return;
@@ -68,6 +69,7 @@
 		},
 
  		wsSetErrorCallback: function(ws, errorCallback) {
+			if (!ws) return;
 			var webSocket = WEBSOCKET.map[ws];
 			var cb = function() {
 				if(webSocket.rtcUserDeleted) return;
@@ -78,6 +80,7 @@
 		},
 
 		wsSetMessageCallback: function(ws, messageCallback) {
+			if (!ws) return;
 			var webSocket = WEBSOCKET.map[ws];
 			webSocket.onmessage = function(evt) {
 				if(webSocket.rtcUserDeleted) return;
@@ -105,17 +108,38 @@
 		},
 
 		wsSendMessage: function(ws, pBuffer, size) {
+			if (!ws) return -1;
 			var webSocket = WEBSOCKET.map[ws];
 			if(webSocket.readyState != 1) return -1;
 			if(size >= 0) {
 				var heapBytes = new Uint8Array(Module['HEAPU8'].buffer, pBuffer, size);
-				webSocket.send(heapBytes);
+				if(heapBytes.buffer instanceof ArrayBuffer) {
+					webSocket.send(heapBytes);
+				} else {
+					var byteArray = new Uint8Array(new ArrayBuffer(size));
+					byteArray.set(heapBytes);
+					webSocket.send(byteArray);
+				}
 				return size;
 			} else {
 				var str = UTF8ToString(pBuffer);
 				webSocket.send(str);
 				return lengthBytesUTF8(str);
 			}
+		},
+
+		wsGetWebSocketUrl: function(ws) {
+			if(!ws) return 0;
+			var webSocket = WEBSOCKET.map[ws];
+			var url = WEBRTC.allocUTF8FromString(webSocket.url);
+			// url should be freed later in c++.
+			return url;
+		},
+
+		wsGetWebSocketState: function(ws) {
+			if(!ws) return WebSocket.CLOSED;
+			var webSocket = WEBSOCKET.map[ws];
+			return webSocket.readyState;
 		},
 
 		wsSetUserPointer: function(ws, ptr) {
