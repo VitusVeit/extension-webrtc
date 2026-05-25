@@ -206,15 +206,14 @@ static void create_channel(int id, std::string label, int type)
     switch (type)
     {
     case TYPE_UNRELIABLE:
-        rel.type = rtc::Reliability::Type::Rexmit;
         rel.unordered = true;
+        rel.maxRetransmits = 0;
         break;
     case TYPE_UNRELIABLE_ORDERED:
-        rel.type = rtc::Reliability::Type::Rexmit;
         rel.unordered = false;
+        rel.maxRetransmits = 0;
         break;
     case TYPE_RELIABLE:
-        rel.type = rtc::Reliability::Type::Reliable;
         rel.unordered = false;
         break;
     }
@@ -223,6 +222,11 @@ static void create_channel(int id, std::string label, int type)
     in.reliability = rel;
     
     auto dc = pc->createDataChannel(label, in);
+    if (!dc)
+    {
+        dmLogError("Failed to create DataChannel with label '%s'", label.c_str());
+        return;
+    }
 
     dc->onOpen([id, dc]() 
     {

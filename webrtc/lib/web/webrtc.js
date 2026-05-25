@@ -272,6 +272,17 @@
 			}
 		},
 
+		rtcCloseDataChannel: function(dc) {
+			var dataChannel = WEBRTC.dataChannelsMap[dc];
+			if(dataChannel) {
+				try {
+					dataChannel.close();
+				} catch (e) {
+					// Ignore close errors for already-closing/closed channels.
+				}
+			}
+		},
+
 		rtcSetDataChannelCallback: function(pc, dataChannelCallback) {
 			if(!pc) return;
 			var peerConnection = WEBRTC.peerConnectionsMap[pc];

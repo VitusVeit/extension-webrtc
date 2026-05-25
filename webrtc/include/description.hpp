@@ -20,23 +20,36 @@
  * SOFTWARE.
  */
 
-#ifndef RTC_RELIABILITY_H
-#define RTC_RELIABILITY_H
+#ifndef RTC_DESCRIPTION_H
+#define RTC_DESCRIPTION_H
 
 #include "common.hpp"
 
-#include <chrono>
-
 namespace rtc {
 
-struct Reliability {
-	enum class Type { Reliable = 0, Rexmit, Timed };
+class Description {
+public:
+	enum class Type { Unspec, Offer, Answer, Pranswer, Rollback };
 
-	Type type = Type::Reliable;
-	bool unordered = false;
-	variant<int, std::chrono::milliseconds> rexmit = 0;
+	Description(const string &sdp, Type type);
+	Description(const string &sdp, string typeString);
+
+	Type type() const;
+	string typeString() const;
+
+	operator string() const;
+
+	static Type stringToType(const string &typeString);
+	static string typeToString(Type type);
+
+private:
+	string mSdp;
+	string mType;
 };
 
 } // namespace rtc
 
-#endif // RTC_RELIABILITY_H
+std::ostream &operator<<(std::ostream &out, const rtc::Description &description);
+std::ostream &operator<<(std::ostream &out, rtc::Description::Type type);
+
+#endif // RTC_DESCRIPTION_H

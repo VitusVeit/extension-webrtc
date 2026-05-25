@@ -20,21 +20,44 @@
  * SOFTWARE.
  */
 
-#ifndef RTC_H
-#define RTC_H
+#ifndef RTC_COMMON_H
+#define RTC_COMMON_H
 
-#include "common.hpp"
-
-#include "datachannel.hpp"
-#include "peerconnection.hpp"
-#include "websocket.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace rtc {
 
-// Dummy functions
-inline void Preload() {}
-inline void Cleanup() {}
+using std::byte;
+using std::nullopt;
+using std::optional;
+using std::shared_ptr;
+using std::string;
+using std::unique_ptr;
+using std::variant;
+using std::weak_ptr;
+
+using binary = std::vector<byte>;
+using message_variant = std::variant<binary, string>;
+
+using std::size_t;
+using std::uint16_t;
+using std::uint32_t;
+using std::uint64_t;
+using std::uint8_t;
+
+template <class... Ts> struct overloaded : Ts... {
+	using Ts::operator()...;
+};
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 } // namespace rtc
 
-#endif // RTC_H
+#endif // RTC_COMMON_H

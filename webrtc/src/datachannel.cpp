@@ -22,14 +22,19 @@
 
 #include "datachannel.hpp"
 
-#include <emscripten.h>
+#include <emscripten/emscripten.h>
 
+#include <chrono>
 #include <exception>
 #include <stdexcept>
 
 extern "C" {
 extern void rtcDeleteDataChannel(int dc);
+extern void rtcCloseDataChannel(int dc);
 extern int rtcGetDataChannelLabel(int dc, char *buffer, int size);
+extern int rtcGetDataChannelUnordered(int dc);
+extern int rtcGetDataChannelMaxPacketLifeTime(int dc);
+extern int rtcGetDataChannelMaxRetransmits(int dc);
 extern void rtcSetOpenCallback(int dc, void (*openCallback)(void *));
 extern void rtcSetErrorCallback(int dc, void (*errorCallback)(const char *, void *));
 extern void rtcSetMessageCallback(int dc, void (*messageCallback)(const char *, int, void *));
@@ -92,14 +97,14 @@ DataChannel::DataChannel(int id) : mId(id), mConnected(false) {
 	mLabel = str;
 }
 
-DataChannel::~DataChannel() { close(); }
+DataChannel::~DataChannel() {
+	close();
+	rtcDeleteDataChannel(mId);
+}
 
 void DataChannel::close() {
 	mConnected = false;
-	if (mId) {
-		rtcDeleteDataChannel(mId);
-		mId = 0;
-	}
+	rtcCloseDataChannel(mId);
 }
 
 bool DataChannel::send(message_variant message) {
@@ -138,6 +143,26 @@ size_t DataChannel::bufferedAmount() const {
 }
 
 std::string DataChannel::label() const { return mLabel; }
+
+Reliability DataChannel::reliability() const {
+	Reliability reliability = {};
+
+	if (!mId)
+		return reliability;
+
+	reliability.unordered = rtcGetDataChannelUnordered(mId) ? true : false;
+
+	int maxRetransmits = rtcGetDataChannelMaxRetransmits(mId);
+	int maxPacketLifeTime = rtcGetDataChannelMaxPacketLifeTime(mId);
+
+	if (maxRetransmits >= 0)
+		reliability.maxRetransmits = unsigned(maxRetransmits);
+
+	if (maxPacketLifeTime >= 0)
+		reliability.maxPacketLifeTime = std::chrono::milliseconds(maxPacketLifeTime);
+
+	return reliability;
+}
 
 void DataChannel::setBufferedAmountLowThreshold(size_t amount) {
 	if (!mId)
