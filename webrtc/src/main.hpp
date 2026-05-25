@@ -1,21 +1,38 @@
 // The datachannel library.
 #if defined(DM_PLATFORM_HTML5)
 #include <emscripten.h>
-#include "rtc.hpp"
+#include "rtc-wasm/rtc.hpp"
+#elif defined(DM_PLATFORM_WINDOWS)
+#include "rtc/rtc.h"
 #else
-#include "libdatachannel/rtc.hpp"
+#include "rtc/rtc.hpp"
 #endif
 
 
+#include <string>
+#include <vector>
 #include <unordered_map>
 #include <memory>
 
 
-rtc::Configuration configuration;
+struct IceServerEntry {
+	std::string hostname;
+	uint16_t port;
+	std::string username;
+	std::string password;
+	bool hasCredentials;
+};
+
+std::vector<IceServerEntry> ice_server_entries;
 
 
+#if defined(DM_PLATFORM_WINDOWS)
+std::unordered_map<int, int> peer_connection_map;
+std::unordered_map<int, std::unordered_map<std::string, int>> data_channel_map;
+#else
 std::unordered_map<int, std::shared_ptr<rtc::PeerConnection>> peer_connection_map;
 std::unordered_map<int, std::unordered_map<std::string, std::shared_ptr<rtc::DataChannel>>> data_channel_map;
+#endif
 
 
 dmScript::LuaCallbackInfo* webrtc_callback = NULL;
@@ -40,7 +57,11 @@ enum Event
 
 void HandleCallback(int event, int id, std::string label, std::string data = "");
 
+#if defined(DM_PLATFORM_WINDOWS)
+static int create_peer(int id);
+#else
 static std::shared_ptr<rtc::PeerConnection> create_peer(int id);
+#endif
 
 static void create_channel(int id, std::string label, int type);
 
