@@ -33,7 +33,7 @@ std::vector<std::string> split(std::string string, const std::string& delimiter)
     return result;
 }
 
-
+// we can't use std::atoi since that throws an exception, and exceptions are disabled
 static bool parse_int(const std::string& value, int* out)
 {
     if (!out || value.empty())
