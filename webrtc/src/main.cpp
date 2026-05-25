@@ -9,8 +9,173 @@
 #include <dmsdk/sdk.h>
 
 #include "main.hpp"
+#include <algorithm>
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
+
+
+#if !defined(DM_PLATFORM_WINDOWS)
+static std::vector<rtc::IceServer> BuildIceServers()
+{
+    std::vector<rtc::IceServer> servers;
+    servers.reserve(ice_server_entries.size());
+
+    for (const IceServerEntry& entry : ice_server_entries)
+    {
+        if (entry.hasCredentials)
+        {
+            servers.emplace_back(entry.hostname, entry.port, entry.username, entry.password);
+        }
+        else
+        {
+            servers.emplace_back(entry.hostname, entry.port);
+        }
+    }
+
+    return servers;
+}
+
+
+static rtc::Configuration BuildConfiguration()
+{
+    rtc::Configuration config;
+    config.iceServers = BuildIceServers();
+    return config;
+}
+#endif
+
+#if defined(DM_PLATFORM_WINDOWS)
+static inline void* ToUserPtr(int value)
+{
+    return reinterpret_cast<void*>(static_cast<intptr_t>(value));
+}
+
+static inline int FromUserPtr(void* ptr)
+{
+    return static_cast<int>(reinterpret_cast<intptr_t>(ptr));
+}
+
+static std::string GetDataChannelLabel(int dc)
+{
+    char label[512] = {0};
+    if (rtcGetDataChannelLabel(dc, label, (int)sizeof(label)) >= 0)
+    {
+        return std::string(label);
+    }
+
+    return std::string();
+}
+
+static std::string FindLabelByDc(int peer_id, int dc)
+{
+    auto peer_it = data_channel_map.find(peer_id);
+    if (peer_it == data_channel_map.end())
+        return std::string();
+
+    for (const auto& kv : peer_it->second)
+    {
+        if (kv.second == dc)
+            return kv.first;
+    }
+
+    return std::string();
+}
+
+static void RTC_API OnPcStateChange(int pc, rtcState state, void* ptr)
+{
+    (void)pc;
+    (void)ptr;
+    dmLogDebug("State: %d", (int)state);
+}
+
+static void RTC_API OnPcGatheringStateChange(int pc, rtcGatheringState state, void* ptr)
+{
+    (void)pc;
+    (void)ptr;
+    dmLogDebug("Gathering State: %d", (int)state);
+}
+
+static void RTC_API OnPcLocalDescription(int pc, const char* sdp, const char* type, void* ptr)
+{
+    (void)pc;
+    const int id = FromUserPtr(ptr);
+    const char* safe_sdp = sdp ? sdp : "";
+    const char* safe_type = type ? type : "";
+
+    std::string message = std::to_string(id) + "@EOS@" + safe_type + "@EOS@" + safe_sdp;
+    HandleCallback(EVENT_SIGNALING_DATA, 0, "", message);
+}
+
+static void RTC_API OnPcLocalCandidate(int pc, const char* cand, const char* mid, void* ptr)
+{
+    (void)pc;
+    const int id = FromUserPtr(ptr);
+    const char* safe_cand = cand ? cand : "";
+    const char* safe_mid = mid ? mid : "";
+
+    std::string message =
+        std::to_string(id) + "@EOS@" +
+        "candidate@EOS@" +
+        safe_cand + "@EOS@" +
+        safe_mid;
+
+    HandleCallback(EVENT_SIGNALING_DATA, 0, "", message);
+}
+
+static void RTC_API OnDcOpen(int dc, void* ptr)
+{
+    const int peer_id = FromUserPtr(ptr);
+    std::string label = FindLabelByDc(peer_id, dc);
+    HandleCallback(EVENT_CHANNEL_OPENED, peer_id, label);
+}
+
+static void RTC_API OnDcClosed(int dc, void* ptr)
+{
+    const int peer_id = FromUserPtr(ptr);
+    std::string label = FindLabelByDc(peer_id, dc);
+    HandleCallback(EVENT_CHANNEL_CLOSED, peer_id, label);
+}
+
+static void RTC_API OnDcMessage(int dc, const char* message, int size, void* ptr)
+{
+    const int peer_id = FromUserPtr(ptr);
+    std::string label = FindLabelByDc(peer_id, dc);
+
+    if (!message || size <= 0)
+    {
+        HandleCallback(EVENT_MESSAGE, peer_id, label, "");
+        return;
+    }
+
+    HandleCallback(EVENT_MESSAGE, peer_id, label, std::string(message, (size_t)size));
+}
+
+static void RegisterDataChannelCallbacks(int peer_id, int dc)
+{
+    rtcSetUserPointer(dc, ToUserPtr(peer_id));
+    rtcSetOpenCallback(dc, OnDcOpen);
+    rtcSetClosedCallback(dc, OnDcClosed);
+    rtcSetMessageCallback(dc, OnDcMessage);
+}
+
+static void RTC_API OnPcDataChannel(int pc, int dc, void* ptr)
+{
+    (void)pc;
+    const int peer_id = FromUserPtr(ptr);
+    std::string label = GetDataChannelLabel(dc);
+
+    if (label.empty())
+    {
+        label = std::string("dc_") + std::to_string(dc);
+    }
+
+    data_channel_map[peer_id][label] = dc;
+    RegisterDataChannelCallbacks(peer_id, dc);
+
+    dmLogDebug("DataChannel from %d received with label \"%s\", is dt open? %d", peer_id, label.c_str(), rtcIsOpen(dc));
+}
+#endif
 
 
 std::vector<std::string> split(std::string string, const std::string& delimiter)
@@ -103,9 +268,61 @@ void HandleCallback(int event, int id, std::string label, std::string data)
 }
 
 
+#if defined(DM_PLATFORM_WINDOWS)
+static int create_peer(int id)
+{
+    std::vector<std::string> urls;
+    urls.reserve(ice_server_entries.size());
+
+    for (const IceServerEntry& entry : ice_server_entries)
+    {
+        if (entry.hasCredentials)
+        {
+            urls.push_back(
+                std::string("turn:") + entry.username + ":" + entry.password + "@" +
+                entry.hostname + ":" + std::to_string(entry.port)
+            );
+        }
+        else
+        {
+            urls.push_back(std::string("stun:") + entry.hostname + ":" + std::to_string(entry.port));
+        }
+    }
+
+    std::vector<const char*> ice_server_ptrs;
+    ice_server_ptrs.reserve(urls.size());
+    for (const std::string& url : urls)
+    {
+        ice_server_ptrs.push_back(url.c_str());
+    }
+
+    rtcConfiguration config = {};
+    config.iceServers = ice_server_ptrs.empty() ? nullptr : ice_server_ptrs.data();
+    config.iceServersCount = (int)ice_server_ptrs.size();
+
+    int pc = rtcCreatePeerConnection(&config);
+    if (pc < 0)
+    {
+        dmLogError("Failed to create PeerConnection for id %d (error %d)", id, pc);
+        return -1;
+    }
+
+    rtcSetUserPointer(pc, ToUserPtr(id));
+    rtcSetStateChangeCallback(pc, OnPcStateChange);
+    rtcSetGatheringStateChangeCallback(pc, OnPcGatheringStateChange);
+    rtcSetLocalDescriptionCallback(pc, OnPcLocalDescription);
+    rtcSetLocalCandidateCallback(pc, OnPcLocalCandidate);
+    rtcSetDataChannelCallback(pc, OnPcDataChannel);
+
+    peer_connection_map[id] = pc;
+    return pc;
+}
+#else
 static std::shared_ptr<rtc::PeerConnection> create_peer(int id) 
-{   
-    std::shared_ptr<rtc::PeerConnection> pc = std::make_shared<rtc::PeerConnection>(configuration);
+{
+    std::shared_ptr<rtc::PeerConnection> pc;
+
+    pc = std::make_shared<rtc::PeerConnection>(BuildConfiguration());
     
     pc->onStateChange([](rtc::PeerConnection::State state) { dmLogDebug("State: %d", int(state)); });
 
@@ -166,7 +383,7 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
                 HandleCallback(EVENT_MESSAGE, id, dc->label(), std::get<std::string>(data));
             }
             else
-                dmLogWarning("Binary message from %d received, size = %lu", id, std::get<rtc::binary>(data).size());
+                dmLogWarning("Binary message from %d received, size = %zu", id, std::get<rtc::binary>(data).size());
         });
 
         data_channel_map[id].emplace(dc->label(), dc);
@@ -175,10 +392,70 @@ static std::shared_ptr<rtc::PeerConnection> create_peer(int id)
     peer_connection_map.emplace(id, pc);
     return pc;
 };
+#endif
 
 
 static void create_channel(int id, std::string label, int type)
 {
+#if defined(DM_PLATFORM_WINDOWS)
+    if (auto jt = data_channel_map[id].find(label); jt != data_channel_map[id].end())
+        return;
+
+    int pc = -1;
+    if (auto jt = peer_connection_map.find(id); jt != peer_connection_map.end())
+        pc = jt->second;
+    else
+        pc = create_peer(id);
+
+    if (pc < 0)
+        return;
+
+    dmLogDebug("Creating DataChannel with label \"%s\"", label.c_str());
+
+    if (type < TYPE_UNRELIABLE or type > TYPE_RELIABLE)
+    {
+        dmLogError("Expected a TYPE_* enum on 'create_channel'  (got %d)", type);
+        return;
+    }
+
+    rtcDataChannelInit in = {};
+    in.protocol = "";
+    in.negotiated = false;
+    in.manualStream = false;
+
+    switch (type)
+    {
+    case TYPE_UNRELIABLE:
+        in.reliability.unordered = true;
+        in.reliability.unreliable = true;
+        in.reliability.maxRetransmits = 0;
+        break;
+    case TYPE_UNRELIABLE_ORDERED:
+        in.reliability.unordered = false;
+        in.reliability.unreliable = true;
+        in.reliability.maxRetransmits = 0;
+        break;
+    case TYPE_RELIABLE:
+        in.reliability.unordered = false;
+        in.reliability.unreliable = false;
+        break;
+    }
+
+    int dc = rtcCreateDataChannelEx(pc, label.c_str(), &in);
+    if (dc < 0)
+    {
+        dmLogError("Failed to create DataChannel with label '%s' (error %d)", label.c_str(), dc);
+        return;
+    }
+
+    data_channel_map[id][label] = dc;
+    RegisterDataChannelCallbacks(id, dc);
+
+    if (rtcIsOpen(dc))
+    {
+        HandleCallback(EVENT_CHANNEL_OPENED, id, label);
+    }
+#else
     // Check if there's already a channel with the same label open.
     if (auto jt = data_channel_map[id].find(label); jt != data_channel_map[id].end())
         return;
@@ -246,15 +523,83 @@ static void create_channel(int id, std::string label, int type)
             HandleCallback(EVENT_MESSAGE, id, dc->label(), std::get<std::string>(data));
         }
         else
-            dmLogWarning("Binary message from %d received, size = %ld", id, std::get<rtc::binary>(data).size());
+            dmLogWarning("Binary message from %d received, size = %zu", id, std::get<rtc::binary>(data).size());
     });
 
     data_channel_map[id].emplace(dc->label(), dc);
+#endif
 }
 
 
 static void process_data(std::string message)
 {
+#if defined(DM_PLATFORM_WINDOWS)
+    message.erase(remove(message.begin(), message.end(), '"'),message.end());
+
+    std::vector<std::string> data = split(message, "@EOS@");
+    if (data.size() < 2)
+    {
+        dmLogError("Invalid signaling payload '%s'", message.c_str());
+        return;
+    }
+
+    int id = 0;
+    if (!parse_int(data[0], &id))
+    {
+        dmLogError("Invalid peer id '%s' in signaling payload", data[0].c_str());
+        return;
+    }
+
+    const std::string type = data[1];
+
+    int pc = -1;
+    if (auto jt = peer_connection_map.find(id); jt != peer_connection_map.end())
+    {
+        pc = jt->second;
+    }
+    else if (type == "offer")
+    {
+        dmLogDebug("Generating an answer to %d", id);
+        pc = create_peer(id);
+    }
+    else
+    {
+        dmLogError("Received data of type '%s' from peer %d, but there isn't any peer connection in place (didn't receive an offer first)", type.c_str(), id);
+        return;
+    }
+
+    if (pc < 0)
+        return;
+
+    if (type == "offer" || type == "answer")
+    {
+        if (data.size() < 3)
+        {
+            dmLogError("Invalid %s payload from peer %d", type.c_str(), id);
+            return;
+        }
+
+        int rc = rtcSetRemoteDescription(pc, data[2].c_str(), type.c_str());
+        if (rc < 0)
+        {
+            dmLogError("Failed to set remote description from peer %d (error %d)", id, rc);
+        }
+    }
+    else if (type == "candidate")
+    {
+        if (data.size() < 4)
+        {
+            dmLogError("Invalid candidate payload from peer %d", id);
+            return;
+        }
+
+        int rc = rtcAddRemoteCandidate(pc, data[2].c_str(), data[3].c_str());
+        if (rc < 0)
+        {
+            dmLogError("Failed to add remote candidate from peer %d (error %d)", id, rc);
+        }
+    }
+#else
     message.erase(remove(message.begin(), message.end(), '\"'),message.end());
 
     std::vector<std::string> data = split(message, "@EOS@");
@@ -313,11 +658,30 @@ static void process_data(std::string message)
         auto mid = data[3];
         pc->addRemoteCandidate(rtc::Candidate(sdp, mid));
     }
+#endif
 }
 
 
 static void send_message(int id, std::string label, std::string message)
 {
+#if defined(DM_PLATFORM_WINDOWS)
+    if (not data_channel_map.count(id)) {
+        dmLogError("No peer found with id %d on \'send_message\'", id);
+        return;
+    }
+
+    if (not data_channel_map[id].count(label)) {
+        dmLogError("No channel \"%s\" found for id %d on \'send_message\'", label.c_str(), id);
+        return;
+    }
+
+    int dc = data_channel_map[id][label];
+    int rc = rtcSendMessage(dc, message.c_str(), (int)message.size());
+    if (rc < 0)
+    {
+        dmLogError("Failed to send message to peer %d on channel '%s' (error %d)", id, label.c_str(), rc);
+    }
+#else
     if (not data_channel_map.count(id)) {
         dmLogError("No peer found with id %d on \'send_message\'", id);
         return;
@@ -329,12 +693,15 @@ static void send_message(int id, std::string label, std::string message)
     }
        
     data_channel_map[id][label]->send(message);
+#endif
 }
 
 
 static int LuaSetConfiguration(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
+
+    ice_server_entries.clear();
     
     // Handle stuns and turns lists.
     std::vector<std::string> result = split(luaL_checkstring(L, 1), ";");
@@ -352,7 +719,11 @@ static int LuaSetConfiguration(lua_State* L)
                 continue;
             }
 
-            configuration.iceServers.push_back(rtc::IceServer(zone[0].c_str(), port));
+            IceServerEntry entry;
+            entry.hostname = zone[0];
+            entry.port = (uint16_t)port;
+            entry.hasCredentials = false;
+            ice_server_entries.push_back(std::move(entry));
         }
         else if (zone.size() == 4)
         {
@@ -362,10 +733,16 @@ static int LuaSetConfiguration(lua_State* L)
                 continue;
             }
 
-            configuration.iceServers.push_back(rtc::IceServer(zone[0].c_str(), port, zone[2].c_str(), zone[3].c_str()));
+            IceServerEntry entry;
+            entry.hostname = zone[0];
+            entry.port = (uint16_t)port;
+            entry.username = zone[2];
+            entry.password = zone[3];
+            entry.hasCredentials = true;
+            ice_server_entries.push_back(std::move(entry));
         }
         else
-            dmLogError("Expected 2 or 4 arguments for an ice server entry, got %lu, on \'set_configuration\'", zone.size());
+            dmLogError("Expected 2 or 4 arguments for an ice server entry, got %zu, on \'set_configuration\'", zone.size());
     }
 
     webrtc_callback = dmScript::CreateCallback(L, 2);  
