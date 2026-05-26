@@ -178,12 +178,30 @@ jobs:
           cp -f "$WASM_WEBRTC_JS" webrtc/lib/wasm-web/webrtc.js
           cp -f "$WASM_WEBSOCKET_JS" webrtc/lib/wasm-web/websocket.js
 
-      - name: Commit and push updated binaries
+      - name: Sync headers with upstream datachannel
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          # make sure datachannel is cloned
+          git submodule update --init --recursive --depth 1
+
+          # refresh destination header directories
+          rm -rf webrtc/include/
+          mkdir -p webrtc/include
+
+          # copy libdatachannel headers -> webrtc/include/rtc
+          cp -a deps/libdatachannel/include/rtc webrtc/include/rtc
+
+          # copy datachannel-wasm headers -> webrtc/include/rtc-wasm
+          cp -a deps/datachannel-wasm/wasm/include/rtc webrtc/include/rtc-wasm
+
+      - name: Commit and push updated binaries and headers
         run: |
           git add webrtc/lib
+          git add webrtc/include
 
           if git diff --cached --quiet; then
-            echo "No binary updates in webrtc/lib"
+            echo "No updates in webrtc/lib or webrtc/include"
             exit 0
           fi
 
