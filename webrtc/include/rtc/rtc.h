@@ -173,6 +173,15 @@ typedef void(RTC_API *rtcAvailableCallbackFunc)(int id, void *ptr);
 typedef void(RTC_API *rtcPliHandlerCallbackFunc)(int tr, void *ptr);
 typedef void(RTC_API *rtcRembHandlerCallbackFunc)(int tr, unsigned int bitrate, void *ptr);
 
+typedef struct {
+	uint32_t timestamp;
+	uint8_t payloadType;
+	double timestampSeconds; // negative means not available
+} rtcFrameInfo;
+
+typedef void(RTC_API *rtcFrameCallbackFunc)(int tr, const char *data, int size,
+                                            const rtcFrameInfo *info, void *ptr);
+
 // Log
 
 // NULL cb on the first call will log to stdout
@@ -314,6 +323,8 @@ RTC_C_EXPORT int rtcGetTrackDirection(int tr, rtcDirection *direction);
 RTC_C_EXPORT int rtcRequestKeyframe(int tr);
 RTC_C_EXPORT int rtcRequestBitrate(int tr, unsigned int bitrate);
 
+RTC_C_EXPORT int rtcSetFrameCallback(int tr, rtcFrameCallbackFunc cb);
+
 #if RTC_ENABLE_MEDIA
 
 // Media
@@ -388,11 +399,18 @@ RTC_C_EXPORT int rtcSetMediaInterceptorCallback(int id, rtcInterceptorCallbackFu
 RTC_C_EXPORT int rtcSetH264Packetizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetH265Packetizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetAV1Packetizer(int tr, const rtcPacketizerInit *init);
+RTC_C_EXPORT int rtcSetVP8Packetizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetOpusPacketizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetAACPacketizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetPCMUPacketizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetPCMAPacketizer(int tr, const rtcPacketizerInit *init);
 RTC_C_EXPORT int rtcSetG722Packetizer(int tr, const rtcPacketizerInit *init);
+
+// Set a depacketizer on track
+RTC_C_EXPORT int rtcSetH264Depacketizer(int tr, rtcNalUnitSeparator nalSeparator);
+RTC_C_EXPORT int rtcSetH265Depacketizer(int tr, rtcNalUnitSeparator nalSeparator);
+RTC_C_EXPORT int rtcSetOpusDepacketizer(int tr);
+RTC_C_EXPORT int rtcSetAACDepacketizer(int tr);
 
 // Deprecated, do not use
 RTC_DEPRECATED static inline int
@@ -431,6 +449,9 @@ RTC_C_EXPORT int rtcChainPliHandler(int tr, rtcPliHandlerCallbackFunc cb);
 // Chain RembHandler on track
 RTC_C_EXPORT int rtcChainRembHandler(int tr, rtcRembHandlerCallbackFunc cb);
 
+// Chain PacingHandler on track
+RTC_C_EXPORT int rtcChainPacingHandler(int tr, double bitsPerSecond, int sendIntervalMs);
+
 // Transform seconds to timestamp using track's clock rate, result is written to timestamp
 RTC_C_EXPORT int rtcTransformSecondsToTimestamp(int id, double seconds, uint32_t *timestamp);
 
@@ -445,6 +466,9 @@ RTC_C_EXPORT int rtcSetTrackRtpTimestamp(int id, uint32_t timestamp);
 
 // Get timestamp of last RTCP SR, result is written to timestamp
 RTC_C_EXPORT int rtcGetLastTrackSenderReportTimestamp(int id, uint32_t *timestamp);
+
+// Get sync timestamps from receiving RTCP session
+RTC_C_EXPORT int rtcGetTrackRtcpSyncTimestamps(int tr, uint64_t *rtpTimestamp, uint64_t *ntpTimestamp);
 
 // Get all available payload types for given codec and stores them in buffer, does nothing if
 // buffer is NULL
@@ -477,10 +501,11 @@ typedef struct {
 	const char *proxyServer;     // only non-authenticated http supported for now
 	const char **protocols;
 	int protocolsCount;
-	int connectionTimeoutMs; // in milliseconds, 0 means default, < 0 means disabled
-	int pingIntervalMs;      // in milliseconds, 0 means default, < 0 means disabled
-	int maxOutstandingPings; // 0 means default, < 0 means disabled
-	int maxMessageSize;      // <= 0 means default
+	int tcpConnectionTimeoutMs; // in milliseconds, 0 means default, < 0 means disabled
+	int connectionTimeoutMs;    // in milliseconds, 0 means default, < 0 means disabled
+	int pingIntervalMs;         // in milliseconds, 0 means default, < 0 means disabled
+	int maxOutstandingPings;    // 0 means default, < 0 means disabled
+	int maxMessageSize;         // <= 0 means default
 } rtcWsConfiguration;
 
 RTC_C_EXPORT int rtcCreateWebSocket(const char *url); // returns ws id

@@ -16,6 +16,8 @@
 
 namespace rtc {
 
+struct RTC_CPP_EXPORT VideoLayersAllocation;
+
 // RTP configuration used in packetization process
 class RTC_CPP_EXPORT RtpPacketizationConfig {
 public:
@@ -74,6 +76,16 @@ public:
 	uint16_t playoutDelayMin = 0;
 	uint16_t playoutDelayMax = 0;
 
+	// Google Video Layers Allocation for simulcast
+	// https://webrtc.googlesource.com/src/+/refs/heads/main/docs/native-code/rtp-hdrext/video-layers-allocation00
+	//
+	// The negotiated extension id
+	uint8_t videoLayersAllocationId = 0;
+	// Stream index, unique per RID/SSRC
+	uint8_t videoLayersAllocationStreamIndex = 0;
+	// Shared data about layers
+	std::shared_ptr<const VideoLayersAllocation> videoLayersAllocationStreams;
+
 	// https://webrtc.googlesource.com/src/+/refs/heads/main/docs/native-code/rtp-hdrext/color-space/
 	uint8_t colorSpaceId = 0;               // the negotiated ID of color space header extension
 	uint8_t colorChromaSitingHorz = 0;      // unspecified
@@ -82,6 +94,14 @@ public:
 	uint8_t colorPrimaries = 1;             // BT.709-6
 	uint8_t colorTransfer = 1;              // BT.709-6
 	uint8_t colorMatrix = 1;                // BT.709-6
+
+	// abs-capture-time RTP header extension. When absCaptureTimeId > 0 and an
+	// outgoing FrameInfo carries an absCaptureTimeNtp value, the RtpPacketizer
+	// writes the 8-byte (shortened) form of the abs-capture-time extension into
+	// every packet for that frame. The receiver can recover the source's
+	// capture wallclock and compute true glass-to-glass latency.
+	// https://webrtc.googlesource.com/src/+/refs/heads/main/docs/native-code/rtp-hdrext/abs-capture-time
+	uint8_t absCaptureTimeId = 0;
 
 	/// Construct RTP configuration used in packetization process
 	/// @param ssrc SSRC of source
