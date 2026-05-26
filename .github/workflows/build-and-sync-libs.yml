@@ -1,0 +1,161 @@
+name: Build and Sync WebRTC Libraries
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules
+        run: git submodule update --init --recursive --depth 1
+
+      - name: Install build dependencies
+        run: sudo apt update && sudo apt install -y libssl-dev
+
+      - name: Configure CMake
+        run: |
+          cd deps/libdatachannel
+          cmake -B build \
+            -DUSE_GNUTLS=0 \
+            -DNO_MEDIA=1 \
+            -DWARNINGS_AS_ERRORS=1 \
+            -DOPENSSL_USE_STATIC_LIBS=1
+
+      - name: Build
+        run: |
+          cd deps/libdatachannel/build
+          make -j"$(nproc)"
+
+      - name: Upload Linux library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-linux
+          path: deps/libdatachannel/build/libdatachannel.so
+
+  build-win32-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Initialize submodules
+        run: git submodule update --init --recursive --depth 1
+
+      - name: Install OpenSSL
+        run: choco install openssl --version=3.1.1 -y
+
+      - name: Configure CMake (NMake)
+        run: |
+          cd deps/libdatachannel
+          cmake -B build64 -G "NMake Makefiles" -DUSE_GNUTLS=0 -DNO_MEDIA=1 -DWARNINGS_AS_ERRORS=1 -DOPENSSL_USE_STATIC_LIBS=1
+
+      - name: Build
+        run: |
+          cd deps/libdatachannel/build64
+          $env:CL = "/MP"
+          nmake
+
+      - name: Upload Win32 library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-win32
+          path: |
+            deps/libdatachannel/build64/datachannel.dll
+            deps/libdatachannel/build64/datachannel.lib
+            deps/libdatachannel/build64/datachannel.exp
+
+  build-web-wasm:
+    runs-on: ubuntu-latest
+    container: emscripten/emsdk:3.1.55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules
+        run: git submodule update --init --recursive --depth 1
+
+      - name: Configure and build wasm
+        run: |
+          cd deps/datachannel-wasm
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
+          cd build
+          make -j2
+
+      - name: Upload WebAssembly library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-web
+          path: deps/datachannel-wasm/build/libdatachannel-wasm.a
+
+  sync-webrtc-lib:
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux-x86_64
+      - build-win32-x86_64
+      - build-web-wasm
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-linux
+          path: _artifacts/x86_64-linux
+
+      - name: Download Win32 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-win32
+          path: _artifacts/x86_64-win32
+
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-web
+          path: _artifacts/wasm-web
+
+      - name: Sync compiled binaries into webrtc/lib
+        run: |
+          mkdir -p webrtc/lib/x86_64-linux
+          mkdir -p webrtc/lib/x86_64-win32
+          mkdir -p webrtc/lib/wasm-web
+
+          cp -f _artifacts/x86_64-linux/libdatachannel.so webrtc/lib/x86_64-linux/libdatachannel.so
+          cp -f _artifacts/x86_64-win32/datachannel.dll webrtc/lib/x86_64-win32/datachannel.dll
+          cp -f _artifacts/x86_64-win32/datachannel.lib webrtc/lib/x86_64-win32/datachannel.lib
+
+          if [ -f _artifacts/x86_64-win32/datachannel.exp ]; then
+            cp -f _artifacts/x86_64-win32/datachannel.exp webrtc/lib/x86_64-win32/datachannel.exp
+          fi
+
+          cp -f _artifacts/wasm-web/libdatachannel-wasm.a webrtc/lib/wasm-web/libdatachannel-wasm.a
+
+      - name: Commit and push updated binaries
+        run: |
+          git add webrtc/lib
+
+          if git diff --cached --quiet; then
+            echo "No binary updates in webrtc/lib"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "ci: update compiled WebRTC libraries"
+          git push
