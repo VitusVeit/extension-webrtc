@@ -103,7 +103,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wasm-web
-          path: deps/datachannel-wasm/build/libdatachannel-wasm.a
+          path: |
+             deps/datachannel-wasm/build/libdatachannel-wasm.a
+             deps/datachannel-wasm/wasm/js/webrtc.js
+             deps/datachannel-wasm/wasm/js/websocket.js
 
   sync-webrtc-lib:
     runs-on: ubuntu-latest
@@ -140,10 +143,17 @@ jobs:
 
       - name: Sync compiled binaries into webrtc/lib
         run: |
+          # delete old directories
+          rm -rf webrtc/lib/x86_64-linux
+          rm -rf webrtc/lib/x86_64-win32
+          rm -rf webrtc/lib/wasm-web
+
+          # make directories we need
           mkdir -p webrtc/lib/x86_64-linux
           mkdir -p webrtc/lib/x86_64-win32
           mkdir -p webrtc/lib/wasm-web
 
+          # copy over artifacts
           cp -f _artifacts/x86_64-linux/libdatachannel.so webrtc/lib/x86_64-linux/libdatachannel.so
           cp -f _artifacts/x86_64-win32/datachannel.dll webrtc/lib/x86_64-win32/datachannel.dll
           cp -f _artifacts/x86_64-win32/datachannel.lib webrtc/lib/x86_64-win32/datachannel.lib
@@ -153,6 +163,10 @@ jobs:
           fi
 
           cp -f _artifacts/wasm-web/libdatachannel-wasm.a webrtc/lib/wasm-web/libdatachannel-wasm.a
+
+          # WASM specific, copy over javascript files
+          cp -f _artifacts/wasm-web/webrtc.js webrtc/lib/wasm-web/webrtc.js
+          cp -f _artifacts/wasm-web/websocket.js webrtc/lib/wasm-web/websocket.js
 
       - name: Commit and push updated binaries
         run: |
