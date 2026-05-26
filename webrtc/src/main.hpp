@@ -2,8 +2,6 @@
 #if defined(DM_PLATFORM_HTML5)
 #include <emscripten.h>
 #include "rtc-wasm/rtc.hpp"
-#elif defined(DM_PLATFORM_WINDOWS)
-#include "rtc/rtc.h"
 #else
 #include "rtc/rtc.hpp"
 #endif
@@ -26,7 +24,7 @@ struct IceServerEntry {
 std::vector<IceServerEntry> ice_server_entries;
 
 
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
 std::unordered_map<int, int> peer_connection_map;
 std::unordered_map<int, std::unordered_map<std::string, int>> data_channel_map;
 #else
@@ -57,7 +55,7 @@ enum Event
 
 void HandleCallback(int event, int id, std::string label, std::string data = "");
 
-#if defined(DM_PLATFORM_WINDOWS)
+#if !defined(DM_PLATFORM_HTML5)
 static int create_peer(int id);
 #else
 static std::shared_ptr<rtc::PeerConnection> create_peer(int id);
