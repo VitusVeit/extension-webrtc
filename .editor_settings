@@ -10,11 +10,19 @@
           "/examples/example.gui"
           :scene
         ]
+        [
+          "/examples/example.collection"
+          :scene
+        ]
       ]
     ]
     :recent-files [
       [
         "/examples/example.gui"
+        :scene
+      ]
+      [
+        "/examples/example.collection"
         :scene
       ]
     ]

@@ -162,11 +162,21 @@ jobs:
             cp -f _artifacts/x86_64-win32/datachannel.exp webrtc/lib/x86_64-win32/datachannel.exp
           fi
 
-          cp -f _artifacts/wasm-web/libdatachannel-wasm.a webrtc/lib/wasm-web/libdatachannel-wasm.a
+          WASM_LIB=$(find _artifacts/wasm-web -type f -name libdatachannel-wasm.a | head -n 1)
+          WASM_WEBRTC_JS=$(find _artifacts/wasm-web -type f -name webrtc.js | head -n 1)
+          WASM_WEBSOCKET_JS=$(find _artifacts/wasm-web -type f -name websocket.js | head -n 1)
+
+          if [ -z "$WASM_LIB" ] || [ -z "$WASM_WEBRTC_JS" ] || [ -z "$WASM_WEBSOCKET_JS" ]; then
+            echo "Missing wasm artifacts after download"
+            find _artifacts/wasm-web -maxdepth 5 -type f
+            exit 1
+          fi
+
+          cp -f "$WASM_LIB" webrtc/lib/wasm-web/libdatachannel-wasm.a
 
           # WASM specific, copy over javascript files
-          cp -f _artifacts/wasm-web/webrtc.js webrtc/lib/wasm-web/webrtc.js
-          cp -f _artifacts/wasm-web/websocket.js webrtc/lib/wasm-web/websocket.js
+          cp -f "$WASM_WEBRTC_JS" webrtc/lib/wasm-web/webrtc.js
+          cp -f "$WASM_WEBSOCKET_JS" webrtc/lib/wasm-web/websocket.js
 
       - name: Commit and push updated binaries
         run: |
