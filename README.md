@@ -4,7 +4,10 @@
 ## About
 
 A quick and easy library that adds support for webrtc to Defold. It makes use of [paullouisageneau's libdatachannel library](https://github.com/paullouisageneau/libdatachannel).
-Currently **it only targets the Web platform** but a port for desktop and mobile platforms is in development.
+
+The wasm version is based off of [datachannel-wasm](https://github.com/paullouisageneau/datachannel-wasm)
+
+Right now, it only works on WASM and Windows, but theoretically it should work on more platforms if the right binaries are compiled and linked.
 
 ## Setup
 
