@@ -7,7 +7,12 @@ using an id that goes from 0 to 99.
 
 Start the signaling server, for example:
 
-python signaling-server.py 127.0.0.1:8080
+```
+python -m venv .venv
+.venv\Scripts\Activate.ps1 # or whatever the activate script is called on your computer
+pip install websockets
+python signaling-server.py localhost:8080
+```
 
 Then run the example (it uses ws://127.0.0.1:8080 by default in example.gui_script).
 

@@ -16,6 +16,8 @@ Currently there aren't any stable releases, the library is still under a heavy p
 
 ## Usage
 
+When you build the web version, it will be served at http://localhost:43763/html5/index.html as long as defold is open
+
 The library already features a lua documentation, in the examples folder there is also a small test that uses the defold websocket extension.
 
 Here's a small overview of the extension:
