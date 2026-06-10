@@ -7,7 +7,9 @@ A quick and easy library that adds support for webrtc to Defold. It makes use of
 
 The wasm version is based off of [datachannel-wasm](https://github.com/paullouisageneau/datachannel-wasm).
 
-Right now, it only works on WASM and Windows, but theoretically it should work on more platforms if the right binaries are compiled and linked.
+Right now, it only works on WASM, Windows, and Linux, but theoretically it should work on more platforms if the right binaries are compiled and linked.
+
+Note: the required headers and binaries are automatically built and compiled from Github actions. See https://github.com/VitusVeit/extension-webrtc/blob/main/.github/workflows/build-and-sync-libs.yml for how this works.
 
 ## Setup
 
