@@ -1,6 +1,6 @@
 - name: webrtc
   type: table
-  desc: Functions and constants for using webrtc. Supported only on web.
+  desc: Functions and constants for using webrtc.
   members:
 
 #*****************************************************************************************************
@@ -12,7 +12,7 @@
       - name: ice_servers
         type: string
         desc: A string containg a list of stun or turn servers (eg "stun_url:PORT;turn_url:PORT:USER:PASSWORD"), a section is delimited by ';' and subdivided by ':'
-        
+
       - name: webrtc_callback
         type: function
         desc: callback for all webrtc events
@@ -20,7 +20,7 @@
         - name: self
           type: object
           desc: The script instance that was used to register the callback
-        
+
         - name: event
           type: number
           desc: The current event. One of the following
@@ -40,15 +40,15 @@
             - name: id
               type: number
               desc: the id of the sender peer, not present if event is `webrtc.EVENT_SIGNALING_DATA`.
-            
+
             - name: label
               type: string
               desc: the label of the DataChannel, not present if event is `webrtc.EVENT_SIGNALING_DATA`.
-            
+
             - name: msg
               type: string
               desc: the message sent from the peer, only present if event is `webrtc.EVENT_MESSAGE`.
-            
+
             - name: signaling
               type: string
               desc: the signaling data to send to the other peer, only present if event is `webrtc.EVENT_SIGNALING_DATA`.
@@ -116,7 +116,7 @@
   - name: EVENT_CHANNEL_OPENED
     type: number
     desc: An event called when a new DataChannel is opened
-  
+
   - name: EVENT_CHANNEL_CLOSED
     type: number
     desc: An event called when a new DataChannel is closed

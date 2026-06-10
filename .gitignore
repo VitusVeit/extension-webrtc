@@ -10,3 +10,5 @@ builtins
 .internal
 .vscode
 *.der
+.venv
+/.editor_settings
